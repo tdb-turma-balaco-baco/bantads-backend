@@ -1,6 +1,7 @@
 package br.tads.ufpr.bantads.user.internal;
 
 import br.tads.ufpr.bantads.user.inbound.CreateUser;
+import br.tads.ufpr.bantads.user.utils.UserBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -8,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UserMapperTest {
     @Test
-    @DisplayName("should convert a CreateUser to a User Entity")
+    @DisplayName("should convert a createUser record to a entity")
     void itShouldConvertCreateUserToEntity() {
         var request = new CreateUser(
                 "firstName",
@@ -27,14 +28,10 @@ class UserMapperTest {
     }
 
     @Test
-    @DisplayName("should convert a User Entity to UserResponse")
+    @DisplayName("should convert the entity to response")
     void itShouldConvertEntityToResponse() {
-        var user = new User();
+        var user = UserBuilder.create();
         user.setId(1L);
-        user.setFirstName("firstName");
-        user.setLastName("lastName");
-        user.setEmail("email@email.com");
-        user.setPassword("password");
 
         var response = UserMapper.toResponse.apply(user);
         assertNotNull(response);

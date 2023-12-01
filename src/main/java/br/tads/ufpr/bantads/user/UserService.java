@@ -10,6 +10,8 @@ import br.tads.ufpr.bantads.user.outbound.UserResponse;
 import br.tads.ufpr.bantads.user.outbound.event.UserCreated;
 import br.tads.ufpr.bantads.user.outbound.event.UserUpdated;
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -24,15 +26,21 @@ import java.util.Objects;
 @RequiredArgsConstructor
 @Slf4j
 public class UserService {
-    private final ApplicationEventPublisher eventPublisher;
+    private final ApplicationEventPublisher publisher;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository repository;
+    private final Validator validator;
 
     public List<UserResponse> findAllUsers() {
         return repository.findAll()
                 .stream()
                 .map(UserMapper.toResponse)
                 .toList();
+    }
+
+    public UserResponse findUserById(@Valid @Positive Long userId) {
+        User user = repository.findById(userId).orElseThrow(RuntimeException::new);
+        return UserMapper.toResponse.apply(user);
     }
 
     public UserResponse userLogin(@Valid UserLogin request) {
@@ -59,7 +67,7 @@ public class UserService {
         var event = new UserCreated(user.getId());
 
         log.info("user created, publishing event {}", event);
-        eventPublisher.publishEvent(event);
+        publisher.publishEvent(event);
 
         return event;
     }
@@ -93,7 +101,7 @@ public class UserService {
 
         var event = new UserUpdated(user.getId());
         log.info("user updated, publishing event {}", event);
-        eventPublisher.publishEvent(event);
+        publisher.publishEvent(event);
 
         return UserMapper.toResponse.apply(user);
     }

@@ -51,23 +51,46 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("should create successfully a user, with encoded password")
-    void create() {
-        service.create(createUser);
-        assertEquals(service.findAllUsers().size(), 1);
+    @DisplayName("find user by id should return user info if it exists")
+    void itShouldFindUserById() {
+        User saved = repository.save(UserBuilder.create());
+        UserResponse response = service.findUserById(saved.getId());
 
-        String password = repository.findAll().get(0).getPassword();
+        assertNotNull(response);
+        assertEquals(response.userId(), saved.getId());
+    }
+
+    @Test
+    @DisplayName("find user by id should not return user info if it not exists")
+    void itShouldNotFindUserById() {
+        assertThrows(RuntimeException.class, () -> {
+            UserResponse response = service.findUserById(1L);
+            assertNull(response);
+        });
+    }
+
+    @Test
+    @DisplayName("should successfully create a user, with a encoded password")
+    void itShouldCreate() {
+        UserCreated created = service.create(createUser);
+        assertEquals(1, repository.count());
+
+        String password = repository
+                .findById(created.userId())
+                .orElseThrow(AssertionError::new)
+                .getPassword();
         assertTrue(passwordEncoder.matches("password", password));
     }
 
     @Test
-    @DisplayName("should not create user with existing email")
-    public void createWithException() {
-        assertEquals(service.findAllUsers().size(), 0);
+    @DisplayName("should not create user with a existing email")
+    public void itShouldNotCreateWithDuplicateEmail() {
         assertThrows(DataIntegrityViolationException.class, () -> {
             service.create(createUser);
             service.create(new CreateUser("firstName", "lastName", createUser.email(), "password"));
         });
+
+        assertEquals(1, repository.count());
     }
 
     @Test
