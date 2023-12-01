@@ -1,0 +1,14 @@
+###
+POST http://localhost:8080/api/user
+Content-Type: application/json
+#Authorization: Basic user 7cd81480-f767-4ba8-bf61-d20670e0613e
+
+{
+  "firstName": "admin",
+  "lastName": "admin",
+  "email": "admin@admin",
+  "password": "admin"
+}
+
+###
+GET http://localhost:8080/api/user
