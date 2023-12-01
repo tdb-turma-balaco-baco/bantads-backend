@@ -9,9 +9,10 @@ public class UserMapper {
 
     public static final Function<CreateUser, User> createUserToEntity = (createUser) -> {
         User user = new User();
+
         user.setFirstName(createUser.firstName());
         user.setLastName(createUser.lastName());
-        user.setEmail(createUser.email());
+        user.setEmail(createUser.email().toLowerCase());
         user.setPassword(createUser.password());
 
         return user;

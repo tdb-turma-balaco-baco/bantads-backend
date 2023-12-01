@@ -2,6 +2,7 @@ package br.tads.ufpr.bantads.user;
 
 import br.tads.ufpr.bantads.user.inbound.CreateUser;
 import br.tads.ufpr.bantads.user.inbound.UpdateUser;
+import br.tads.ufpr.bantads.user.inbound.UserLogin;
 import br.tads.ufpr.bantads.user.internal.User;
 import br.tads.ufpr.bantads.user.internal.UserMapper;
 import br.tads.ufpr.bantads.user.internal.UserRepository;
@@ -28,10 +29,21 @@ public class UserService {
     private final UserRepository repository;
 
     public List<UserResponse> findAllUsers() {
-        return this.repository.findAll()
+        return repository.findAll()
                 .stream()
                 .map(UserMapper.toResponse)
                 .toList();
+    }
+
+    public UserResponse userLogin(@Valid UserLogin request) {
+        User user = repository.findUserByEmail(request.email().toLowerCase()).orElseThrow(RuntimeException::new);
+
+        if (passwordEncoder.matches(request.password(), user.getPassword())) {
+            log.debug("user login successful {}", user.getEmail());
+            return UserMapper.toResponse.apply(user);
+        }
+
+        return null;
     }
 
     @Transactional
@@ -42,7 +54,7 @@ public class UserService {
         user.setPassword(encodedPassword);
 
         log.debug("saving user to database {}", user.getEmail());
-        user = this.repository.save(user);
+        user = repository.save(user);
 
         var event = new UserCreated(user.getId());
 
@@ -54,7 +66,7 @@ public class UserService {
 
     @Transactional
     public UserResponse update(@Valid UpdateUser request) {
-        User user = this.repository.findById(request.userId()).orElseThrow(RuntimeException::new);
+        User user = repository.findById(request.userId()).orElseThrow(RuntimeException::new);
 
         if (Objects.nonNull(request.firstName())) {
             log.debug("updating firstName for user {}", request.userId());
@@ -68,7 +80,7 @@ public class UserService {
 
         if (Objects.nonNull(request.email())) {
             log.debug("updating email for user {}", request.userId());
-            user.setEmail(request.email());
+            user.setEmail(request.email().toLowerCase());
         }
 
         if (Objects.nonNull(request.password())) {

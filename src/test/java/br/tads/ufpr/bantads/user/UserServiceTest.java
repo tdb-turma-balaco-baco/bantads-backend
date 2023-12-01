@@ -2,8 +2,12 @@ package br.tads.ufpr.bantads.user;
 
 import br.tads.ufpr.bantads.user.inbound.CreateUser;
 import br.tads.ufpr.bantads.user.inbound.UpdateUser;
+import br.tads.ufpr.bantads.user.inbound.UserLogin;
 import br.tads.ufpr.bantads.user.internal.User;
 import br.tads.ufpr.bantads.user.internal.UserRepository;
+import br.tads.ufpr.bantads.user.outbound.UserResponse;
+import br.tads.ufpr.bantads.user.outbound.event.UserCreated;
+import br.tads.ufpr.bantads.user.utils.UserBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,10 +15,8 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.junit4.SpringRunner;
-
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,6 +28,8 @@ class UserServiceTest {
     private UserService service;
     @Autowired
     private UserRepository repository;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
@@ -35,12 +39,15 @@ class UserServiceTest {
     @Test
     @DisplayName("should find list of saved users")
     void findAllUsers() {
-        service.create(createUser);
-        service.create(new CreateUser("firstName",  "lastName", "email1@email.com", "password"));
-        service.create(new CreateUser("firstName",  "lastName", "email2@email.com", "password"));
+        for (int i = 0; i < 3; i++) {
+            User entity = UserBuilder.create();
+
+            entity.setEmail("email" + i + "@email.com");
+            repository.save(entity);
+        }
 
         var allUsers = service.findAllUsers();
-        assertEquals(allUsers.size(), 3);
+        assertEquals(3, allUsers.size());
     }
 
     @Test
@@ -50,7 +57,7 @@ class UserServiceTest {
         assertEquals(service.findAllUsers().size(), 1);
 
         String password = repository.findAll().get(0).getPassword();
-        assertTrue(new BCryptPasswordEncoder().matches("password", password));
+        assertTrue(passwordEncoder.matches("password", password));
     }
 
     @Test
@@ -66,30 +73,57 @@ class UserServiceTest {
     @Test
     @DisplayName("should update all user values successfully")
     void update() {
-        var created = service.create(createUser);
-        service.update(new UpdateUser(created.userId(), "newFirstName", "newLastName", "newEmail@email.com", "newPassword"));
+        var created = repository.save(UserBuilder.create());
+        UpdateUser update = new UpdateUser(created.getId(), "newFirstName", "newLastName", "newEmail@email.com", "newPassword");
 
-        User user = repository.findById(created.userId()).get();
-        assertEquals("newFirstName", user.getFirstName());
-        assertEquals("newLastName", user.getLastName());
-        assertEquals("newEmail@email.com", user.getEmail());
-        assertTrue(new BCryptPasswordEncoder().matches("newPassword", user.getPassword()));
+        service.update(update);
+        User user = repository.findById(created.getId()).get();
 
-        assertTrue(true);
+        assertEquals(update.firstName(), user.getFirstName());
+        assertEquals(update.lastName(), user.getLastName());
+
+        assertEquals(update.email().toLowerCase(), user.getEmail());
+
+        assertTrue(passwordEncoder.matches(update.password(), user.getPassword()));
     }
 
     @Test
     @DisplayName("should update some of the user values")
     void updatePartial() {
         var created = service.create(createUser);
-        service.update(new UpdateUser(created.userId(), "newFirstName", null,"newEmail@email.com", null));
 
+        UpdateUser update = new UpdateUser(created.userId(), "newFirstName", null, "newEmail@email.com", null);
+        service.update(update);
         User user = repository.findById(created.userId()).get();
-        assertEquals("newFirstName", user.getFirstName());
-        assertEquals("lastName", user.getLastName());
-        assertEquals("newEmail@email.com", user.getEmail());
-        assertFalse(new BCryptPasswordEncoder().matches("newPassword", user.getPassword()));
 
-        assertTrue(true);
+        // updated values
+        assertEquals(update.firstName(), user.getFirstName());
+        assertEquals(update.email().toLowerCase(), user.getEmail());
+
+        // non updated values
+        assertNotEquals(update.lastName(), user.getLastName());
+        assertEquals(createUser.lastName(), user.getLastName());
+        assertTrue(passwordEncoder.matches(createUser.password(), user.getPassword()));
+    }
+
+    @Test
+    @DisplayName("should return user response when login successful")
+    public void login() {
+        UserCreated created = service.create(createUser);
+
+        UserResponse userResponse = service.userLogin(new UserLogin(createUser.email(), createUser.password()));
+
+        assertNotNull(userResponse);
+        assertEquals(created.userId(), userResponse.userId());
+    }
+
+    @Test
+    @DisplayName("should not return user response when login with incorrect info")
+    public void givenInvalidLoginShouldNotFind() {
+        service.create(createUser);
+        var response = service.userLogin(new UserLogin(createUser.email(), "invalid"));
+        assertNull(response);
+
+        assertThrows(RuntimeException.class, () -> service.userLogin(new UserLogin("invalid@email.com", createUser.password())));
     }
 }
