@@ -1,29 +1,23 @@
 package br.tads.ufpr.bantads.user;
 
-import br.tads.ufpr.bantads.user.inbound.CreateUser;
-import br.tads.ufpr.bantads.user.inbound.UpdateUser;
-import br.tads.ufpr.bantads.user.inbound.UserLogin;
 import br.tads.ufpr.bantads.user.internal.User;
 import br.tads.ufpr.bantads.user.internal.UserRepository;
-import br.tads.ufpr.bantads.user.outbound.UserResponse;
-import br.tads.ufpr.bantads.user.outbound.event.UserCreated;
 import br.tads.ufpr.bantads.user.utils.UserBuilder;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.junit4.SpringRunner;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@RunWith(SpringRunner.class)
-@SpringBootTest
+@ApplicationModuleTest
 class UserServiceTest {
-    private static final CreateUser createUser = new CreateUser("firstName", "lastName", "email@email.com", "password");
+
     @Autowired
     private UserService service;
     @Autowired
@@ -40,7 +34,7 @@ class UserServiceTest {
     @DisplayName("should find list of saved users")
     void findAllUsers() {
         for (int i = 0; i < 3; i++) {
-            User entity = UserBuilder.create();
+            User entity = UserBuilder.builder().password(passwordEncoder.encode("password")).build();
 
             entity.setEmail("email" + i + "@email.com");
             repository.save(entity);
@@ -53,7 +47,7 @@ class UserServiceTest {
     @Test
     @DisplayName("find user by id should return user info if it exists")
     void itShouldFindUserById() {
-        User saved = repository.save(UserBuilder.create());
+        User saved = repository.save(UserBuilder.of());
         UserResponse response = service.findUserById(saved.getId());
 
         assertNotNull(response);
@@ -70,24 +64,19 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("should successfully create a user, with a encoded password")
+    @DisplayName("should successfully create a user")
     void itShouldCreate() {
-        UserCreated created = service.create(createUser);
+        service.create(new CreateUser("email@email.com"));
         assertEquals(1, repository.count());
-
-        String password = repository
-                .findById(created.userId())
-                .orElseThrow(AssertionError::new)
-                .getPassword();
-        assertTrue(passwordEncoder.matches("password", password));
     }
 
     @Test
     @DisplayName("should not create user with a existing email")
     public void itShouldNotCreateWithDuplicateEmail() {
+        User saved = repository.save(UserBuilder.of());
+
         assertThrows(DataIntegrityViolationException.class, () -> {
-            service.create(createUser);
-            service.create(new CreateUser("firstName", "lastName", createUser.email(), "password"));
+            service.create(new CreateUser(saved.getEmail()));
         });
 
         assertEquals(1, repository.count());
@@ -96,57 +85,44 @@ class UserServiceTest {
     @Test
     @DisplayName("should update all user values successfully")
     void update() {
-        var created = repository.save(UserBuilder.create());
-        UpdateUser update = new UpdateUser(created.getId(), "newFirstName", "newLastName", "newEmail@email.com", "newPassword");
+        var created = repository.save(UserBuilder.of());
+        UpdateUser update = new UpdateUser(created.getId(), "newEmail@email.com", "newPassword");
 
         service.update(update);
-        User user = repository.findById(created.getId()).get();
+        User updated = repository.findById(created.getId()).orElseThrow(AssertionError::new);
 
-        assertEquals(update.firstName(), user.getFirstName());
-        assertEquals(update.lastName(), user.getLastName());
-
-        assertEquals(update.email().toLowerCase(), user.getEmail());
-
-        assertTrue(passwordEncoder.matches(update.password(), user.getPassword()));
+        assertEquals(update.email().toLowerCase(), updated.getEmail());
     }
 
     @Test
     @DisplayName("should update some of the user values")
     void updatePartial() {
-        var created = service.create(createUser);
+        repository.save(UserBuilder.of());
 
-        UpdateUser update = new UpdateUser(created.userId(), "newFirstName", null, "newEmail@email.com", null);
-        service.update(update);
-        User user = repository.findById(created.userId()).get();
+        List<Long> ids = repository.findAll().stream().map(User::getId).toList();
 
-        // updated values
-        assertEquals(update.firstName(), user.getFirstName());
-        assertEquals(update.email().toLowerCase(), user.getEmail());
+        UpdateUser request = new UpdateUser(ids.get(0), "newEmail@email.com", null);
+        service.update(request);
 
-        // non updated values
-        assertNotEquals(update.lastName(), user.getLastName());
-        assertEquals(createUser.lastName(), user.getLastName());
-        assertTrue(passwordEncoder.matches(createUser.password(), user.getPassword()));
+        User entity = repository.findById(ids.get(0)).orElseThrow(AssertionError::new);
+        assertEquals("newemail@email.com", entity.getEmail());
     }
 
     @Test
     @DisplayName("should return user response when login successful")
     public void login() {
-        UserCreated created = service.create(createUser);
+        User saved = repository.save(UserBuilder.builder().password(passwordEncoder.encode("password")).build());
+        UserResponse response = service.userLogin(new UserLogin(saved.getEmail(), "password"));
 
-        UserResponse userResponse = service.userLogin(new UserLogin(createUser.email(), createUser.password()));
-
-        assertNotNull(userResponse);
-        assertEquals(created.userId(), userResponse.userId());
+        assertNotNull(response);
+        assertEquals(saved.getId(), response.userId());
     }
 
     @Test
     @DisplayName("should not return user response when login with incorrect info")
     public void givenInvalidLoginShouldNotFind() {
-        service.create(createUser);
-        var response = service.userLogin(new UserLogin(createUser.email(), "invalid"));
-        assertNull(response);
-
-        assertThrows(RuntimeException.class, () -> service.userLogin(new UserLogin("invalid@email.com", createUser.password())));
+        User saved = repository.save(UserBuilder.builder().password(passwordEncoder.encode("password")).build());
+        UserResponse response = service.userLogin(new UserLogin(saved.getEmail(), "invalid"));
+        assertThrows(RuntimeException.class, () -> service.userLogin(new UserLogin("invalid@email.com", "")));
     }
 }

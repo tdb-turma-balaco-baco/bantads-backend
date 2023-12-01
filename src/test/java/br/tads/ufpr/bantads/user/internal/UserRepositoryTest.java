@@ -15,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class UserRepositoryTest {
     @Autowired
     private UserRepository repository;
-    private static final User user = UserBuilder.create();
 
     @BeforeEach
     void setUp() {
@@ -25,7 +24,7 @@ class UserRepositoryTest {
     @Test
     @DisplayName("should find user by email")
     void findUserByEmail() {
-        repository.save(user);
-        assertTrue(repository.findUserByEmail(user.getEmail()).isPresent());
+        repository.save(UserBuilder.of());
+        assertTrue(repository.findUserByEmail(UserBuilder.of().getEmail()).isPresent());
     }
 }

@@ -1,35 +1,34 @@
 package br.tads.ufpr.bantads.user;
 
-import br.tads.ufpr.bantads.user.inbound.CreateUser;
-import br.tads.ufpr.bantads.user.inbound.UpdateUser;
-import br.tads.ufpr.bantads.user.inbound.UserLogin;
 import br.tads.ufpr.bantads.user.internal.User;
 import br.tads.ufpr.bantads.user.internal.UserMapper;
 import br.tads.ufpr.bantads.user.internal.UserRepository;
-import br.tads.ufpr.bantads.user.outbound.UserResponse;
-import br.tads.ufpr.bantads.user.outbound.event.UserCreated;
-import br.tads.ufpr.bantads.user.outbound.event.UserUpdated;
 import jakarta.validation.Valid;
-import jakarta.validation.Validator;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
+import org.passay.CharacterRule;
+import org.passay.EnglishCharacterData;
+import org.passay.PasswordGenerator;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class UserService {
-    private final ApplicationEventPublisher publisher;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository repository;
-    private final Validator validator;
 
     public List<UserResponse> findAllUsers() {
         return repository.findAll()
@@ -44,7 +43,9 @@ public class UserService {
     }
 
     public UserResponse userLogin(@Valid UserLogin request) {
-        User user = repository.findUserByEmail(request.email().toLowerCase()).orElseThrow(RuntimeException::new);
+        User user = repository
+                .findUserByEmail(request.email().toLowerCase())
+                .orElseThrow(RuntimeException::new);
 
         if (passwordEncoder.matches(request.password(), user.getPassword())) {
             log.debug("user login successful {}", user.getEmail());
@@ -54,37 +55,28 @@ public class UserService {
         return null;
     }
 
-    @Transactional
-    public UserCreated create(@Valid CreateUser request) {
-        User user = UserMapper.createUserToEntity.apply(request);
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @TransactionalEventListener
+    public void create(@Valid CreateUser request) {
+        Optional<User> optional = repository.findUserByEmail(request.email());
+        if (optional.isPresent()) {
+            throw new DataIntegrityViolationException("email already in use");
+        }
 
-        String encodedPassword = passwordEncoder.encode(user.getPassword());
+        String encodedPassword = passwordEncoder.encode(generateRandomPassword());
+
+        var user = new User();
+        user.setEmail(request.email().toLowerCase());
         user.setPassword(encodedPassword);
 
         log.debug("saving user to database {}", user.getEmail());
-        user = repository.save(user);
-
-        var event = new UserCreated(user.getId());
-
-        log.info("user created, publishing event {}", event);
-        publisher.publishEvent(event);
-
-        return event;
+        repository.save(user);
     }
 
-    @Transactional
-    public UserResponse update(@Valid UpdateUser request) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @TransactionalEventListener
+    public void update(@Valid UpdateUser request) {
         User user = repository.findById(request.userId()).orElseThrow(RuntimeException::new);
-
-        if (Objects.nonNull(request.firstName())) {
-            log.debug("updating firstName for user {}", request.userId());
-            user.setFirstName(request.firstName());
-        }
-
-        if (Objects.nonNull(request.lastName())) {
-            log.debug("updating lastName for user {}", request.userId());
-            user.setLastName(request.lastName());
-        }
 
         if (Objects.nonNull(request.email())) {
             log.debug("updating email for user {}", request.userId());
@@ -97,12 +89,15 @@ public class UserService {
         }
 
         log.debug("updating user on database {}", user);
-        user = repository.saveAndFlush(user);
+        repository.save(user);
+    }
 
-        var event = new UserUpdated(user.getId());
-        log.info("user updated, publishing event {}", event);
-        publisher.publishEvent(event);
+    private static String generateRandomPassword() {
+        List<CharacterRule> rules = List.of(
+                new CharacterRule(EnglishCharacterData.Digit),
+                new CharacterRule(EnglishCharacterData.Alphabetical),
+                new CharacterRule(EnglishCharacterData.Special));
 
-        return UserMapper.toResponse.apply(user);
+        return new PasswordGenerator().generatePassword(16, rules);
     }
 }

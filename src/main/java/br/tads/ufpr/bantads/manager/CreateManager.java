@@ -1,4 +1,4 @@
-package br.tads.ufpr.bantads.manager.inbound;
+package br.tads.ufpr.bantads.manager;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotEmpty;
