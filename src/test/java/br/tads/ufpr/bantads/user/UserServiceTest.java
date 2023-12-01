@@ -1,6 +1,8 @@
 package br.tads.ufpr.bantads.user;
 
 import br.tads.ufpr.bantads.user.inbound.CreateUser;
+import br.tads.ufpr.bantads.user.inbound.UpdateUser;
+import br.tads.ufpr.bantads.user.internal.User;
 import br.tads.ufpr.bantads.user.internal.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.junit4.SpringRunner;
+
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,7 +33,7 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("Should find list of saved users")
+    @DisplayName("should find list of saved users")
     void findAllUsers() {
         service.create(createUser);
         service.create(new CreateUser("firstName",  "lastName", "email1@email.com", "password"));
@@ -40,7 +44,7 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("Should create successfully a user, with encoded password")
+    @DisplayName("should create successfully a user, with encoded password")
     void create() {
         service.create(createUser);
         assertEquals(service.findAllUsers().size(), 1);
@@ -50,7 +54,7 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("Should not create user with existing email")
+    @DisplayName("should not create user with existing email")
     public void createWithException() {
         assertEquals(service.findAllUsers().size(), 0);
         assertThrows(DataIntegrityViolationException.class, () -> {
@@ -60,8 +64,32 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("should update all user values successfully")
     void update() {
-        service.create(createUser);
+        var created = service.create(createUser);
+        service.update(new UpdateUser(created.userId(), "newFirstName", "newLastName", "newEmail@email.com", "newPassword"));
+
+        User user = repository.findById(created.userId()).get();
+        assertEquals("newFirstName", user.getFirstName());
+        assertEquals("newLastName", user.getLastName());
+        assertEquals("newEmail@email.com", user.getEmail());
+        assertTrue(new BCryptPasswordEncoder().matches("newPassword", user.getPassword()));
+
+        assertTrue(true);
+    }
+
+    @Test
+    @DisplayName("should update some of the user values")
+    void updatePartial() {
+        var created = service.create(createUser);
+        service.update(new UpdateUser(created.userId(), "newFirstName", null,"newEmail@email.com", null));
+
+        User user = repository.findById(created.userId()).get();
+        assertEquals("newFirstName", user.getFirstName());
+        assertEquals("lastName", user.getLastName());
+        assertEquals("newEmail@email.com", user.getEmail());
+        assertFalse(new BCryptPasswordEncoder().matches("newPassword", user.getPassword()));
+
         assertTrue(true);
     }
 }

@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UserMapperTest {
     @Test
-    @DisplayName("Should convert a CreateUser to a User Entity")
+    @DisplayName("should convert a CreateUser to a User Entity")
     void itShouldConvertCreateUserToEntity() {
         var request = new CreateUser(
                 "firstName",
@@ -27,7 +27,7 @@ class UserMapperTest {
     }
 
     @Test
-    @DisplayName("Should convert a User Entity to UserResponse")
+    @DisplayName("should convert a User Entity to UserResponse")
     void itShouldConvertEntityToResponse() {
         var user = new User();
         user.setId(1L);
